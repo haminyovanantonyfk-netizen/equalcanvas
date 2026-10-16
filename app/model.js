@@ -126,8 +126,8 @@ export class DiagramFile {
         "Please open a .drawio or draw.io XML diagram. Images and PDFs are not supported yet.",
       );
     const file = new DiagramFile(doc);
-    if (!file.pages.length || file.pages.length > LIMITS.pages)
-      throw new Error("A diagram must contain between 1 and 40 pages.");
+    if (file.pages.length > LIMITS.pages)
+      throw new Error("A diagram can contain at most 40 pages.");
     // Validate every page before accepting the file, so an export cannot conceal a malformed page.
     for (let index = 0; index < file.pages.length; index++)
       await file.page(index);
@@ -166,6 +166,114 @@ export class DiagramFile {
 
   markChanged(index) {
     this.changed.add(index);
+  }
+
+  pageName(index) {
+    return this.pages[index]?.getAttribute("name") || `Page ${index + 1}`;
+  }
+
+  uniquePageName(base) {
+    const names = new Set(
+      this.pages.map((_, i) => this.pageName(i).toLocaleLowerCase()),
+    );
+    if (!base) {
+      let number = 1;
+      while (names.has(`page ${number}`)) number++;
+      return `Page ${number}`;
+    }
+    let name = base,
+      suffix = 1;
+    while (names.has(name.toLocaleLowerCase())) name = `${base} ${++suffix}`;
+    return name;
+  }
+
+  validatePageName(name, except = -1) {
+    name = name.trim();
+    if (!name || name.length > 120)
+      throw new Error("Use a page name between 1 and 120 characters.");
+    if (
+      this.pages.some(
+        (_, i) =>
+          i !== except &&
+          this.pageName(i).toLocaleLowerCase() === name.toLocaleLowerCase(),
+      )
+    )
+      throw new Error("A page already has that name. Choose a different name.");
+    return name;
+  }
+
+  // Flush edited graphs before structural changes so index-based caches cannot attach
+  // one page's edits to another page after reordering or deletion.
+  flushPages() {
+    for (const index of this.changed)
+      this.pages[index].replaceChildren(
+        this.doc.importNode(this.graphs.get(index).doc.documentElement, true),
+      );
+    this.pages = children(this.doc.documentElement, "diagram");
+    this.graphs.clear();
+    this.changed.clear();
+    this.expandedBytes = 0;
+  }
+
+  addPage(name) {
+    name = this.validatePageName(name);
+    if (this.pages.length >= LIMITS.pages)
+      throw new Error("This diagram has reached the 40-page limit.");
+    this.flushPages();
+    const page = this.doc.createElement("diagram");
+    page.setAttribute("id", "ec-page-" + crypto.randomUUID());
+    page.setAttribute("name", name);
+    page.append(
+      this.doc.importNode(parseXML(EMPTY_GRAPH).documentElement, true),
+    );
+    this.doc.documentElement.append(page);
+    this.pages.push(page);
+    return this.pages.length - 1;
+  }
+
+  renamePage(index, name) {
+    if (!this.pages[index]) throw new Error("Choose a page first.");
+    this.pages[index].setAttribute("name", this.validatePageName(name, index));
+    return index;
+  }
+
+  duplicatePage(index) {
+    if (!this.pages[index]) throw new Error("Choose a page first.");
+    if (this.pages.length >= LIMITS.pages)
+      throw new Error("This diagram has reached the 40-page limit.");
+    const name = this.uniquePageName(
+      this.pageName(index).slice(0, 100) + " copy",
+    );
+    this.flushPages();
+    const copy = this.pages[index].cloneNode(true);
+    copy.setAttribute("id", "ec-page-" + crypto.randomUUID());
+    copy.setAttribute("name", name);
+    this.pages[index].after(copy);
+    this.pages = children(this.doc.documentElement, "diagram");
+    return index + 1;
+  }
+
+  deletePage(index) {
+    if (!this.pages[index]) throw new Error("Choose a page first.");
+    this.flushPages();
+    this.pages[index].remove();
+    this.pages = children(this.doc.documentElement, "diagram");
+    return Math.min(index, this.pages.length - 1);
+  }
+
+  movePage(index, offset) {
+    const destination = index + offset;
+    if (
+      !this.pages[index] ||
+      !this.pages[destination] ||
+      ![-1, 1].includes(offset)
+    )
+      throw new Error("That page cannot move any further.");
+    this.flushPages();
+    if (offset === -1) this.pages[destination].before(this.pages[index]);
+    else this.pages[destination].after(this.pages[index]);
+    this.pages = children(this.doc.documentElement, "diagram");
+    return destination;
   }
 
   serialize() {
@@ -366,9 +474,10 @@ export class Graph {
     this.checkCapacity();
     const id = this.id(),
       cell = this.doc.createElement("mxCell");
+    const parent = options.parent || this.layer();
     cell.setAttribute("id", id);
     cell.setAttribute("vertex", "1");
-    cell.setAttribute("parent", options.parent || this.layer());
+    cell.setAttribute("parent", parent);
     cell.setAttribute(
       "style",
       `whiteSpace=wrap;html=1;${kind === "decision" ? "rhombus;" : "rounded=1;"}`,
@@ -377,7 +486,7 @@ export class Graph {
     const maxY = Math.max(
       0,
       ...this.nodes
-        .filter((node) => node.parent === (options.parent || this.layer()))
+        .filter((node) => node.parent === parent)
         .map((node) => node.y + node.height),
     );
     for (const [key, value] of Object.entries({
@@ -518,5 +627,8 @@ export class Graph {
   }
 }
 
+export const EMPTY_GRAPH =
+  '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel>';
+export const BLANK = "<mxfile/>";
 export const EMPTY =
   '<mxfile><diagram id="page-1" name="Page 1"><mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/></root></mxGraphModel></diagram></mxfile>';

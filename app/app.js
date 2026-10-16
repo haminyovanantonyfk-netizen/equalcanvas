@@ -1,4 +1,11 @@
-import { DiagramFile, EMPTY, LIMITS } from "./model.js";
+import { DiagramFile, EMPTY, BLANK, LIMITS } from "./model.js";
+import {
+  inspectGraph,
+  outline,
+  flowLabels,
+  addFlow,
+  FLOW_TEMPLATES,
+} from "./insights.js";
 
 const $ = (id) => document.getElementById(id);
 const state = {
@@ -53,7 +60,14 @@ function snapshot() {
     page: state.page,
     selected: state.selected,
     dirty: state.dirty,
+    name: state.name,
   };
+}
+
+async function graphFor(file, page) {
+  return file.pages.length
+    ? file.page(page)
+    : (await DiagramFile.open(EMPTY)).page(0);
 }
 function trimHistory(stack) {
   while (
@@ -68,8 +82,9 @@ async function load(text, name, page = 0) {
     throw new Error("Please wait for the current diagram operation to finish.");
   state.busy = true;
   try {
-    const file = await DiagramFile.open(text),
-      graph = await file.page(page);
+    const file = await DiagramFile.open(text);
+    page = file.pages.length ? page : -1;
+    const graph = await graphFor(file, page);
     // Commit only after the new document has passed validation.
     state.file = file;
     state.graph = graph;
@@ -89,6 +104,8 @@ async function load(text, name, page = 0) {
 
 async function mutate(operation, message) {
   if (state.busy || !state.file) return;
+  if (!state.file.pages.length)
+    throw new Error("0 pages created. Create a page before adding steps.");
   state.busy = true;
   const before = snapshot();
   try {
@@ -115,8 +132,42 @@ async function mutate(operation, message) {
     return true;
   } catch (error) {
     state.file = await DiagramFile.open(before.xml);
-    state.graph = await state.file.page(before.page);
+    state.graph = await graphFor(state.file, before.page);
     state.selected = before.selected;
+    render();
+    throw error;
+  } finally {
+    state.busy = false;
+  }
+}
+
+async function mutateDocument(operation, message) {
+  if (state.busy) return;
+  const before = snapshot();
+  state.busy = true;
+  try {
+    const page = await operation(state.file);
+    // Reopen transactionally: validates changed page structure, file size, and all expansion limits.
+    const file = await DiagramFile.open(state.file.serialize());
+    state.file = file;
+    state.page = file.pages.length ? page : -1;
+    state.graph = await graphFor(file, state.page);
+    state.selected = state.graph.nodes[0]?.id || null;
+    state.undo.push(before);
+    trimHistory(state.undo);
+    state.redo = [];
+    state.dirty = true;
+    $("search").value = "";
+    clearError();
+    render();
+    announce(message);
+  } catch (error) {
+    state.file = await DiagramFile.open(before.xml);
+    state.page = before.page;
+    state.graph = await graphFor(state.file, before.page);
+    state.selected = before.selected;
+    state.name = before.name;
+    state.dirty = before.dirty;
     render();
     throw error;
   } finally {
@@ -133,7 +184,7 @@ async function history(direction) {
   try {
     const entry = source[source.length - 1],
       file = await DiagramFile.open(entry.xml),
-      graph = await file.page(entry.page);
+      graph = await graphFor(file, entry.page);
     target.push(snapshot());
     trimHistory(target);
     source.pop();
@@ -142,6 +193,7 @@ async function history(direction) {
     state.page = entry.page;
     state.selected = entry.selected;
     state.dirty = entry.dirty;
+    state.name = entry.name;
     render();
     announce(direction === "undo" ? "Change undone." : "Change restored.");
   } catch (error) {
@@ -177,11 +229,41 @@ function render() {
     }),
   );
   $("page-select").value = String(state.page);
+  const pageCount = state.file.pages.length,
+    hasPage = pageCount > 0,
+    hasSteps = state.graph.nodes.length > 0;
+  $("page-count").textContent =
+    `${pageCount} page${pageCount === 1 ? "" : "s"} created`;
+  if (!hasPage)
+    $("page-select").replaceChildren(element("option", "0 pages created"));
+  $("page-select").disabled = !hasPage;
+  $("manage-pages").disabled = !hasPage;
+  $("add-page").disabled = pageCount >= LIMITS.pages;
+  $("add-step").disabled = !hasPage;
+  $("search").disabled = !hasSteps;
+  $("download").disabled = !hasPage;
+  $("download").title = hasPage
+    ? "Download your editable diagram"
+    : "Create a page before downloading";
+  $("build-flow").disabled = !hasPage;
+  $("check-diagram").disabled = !hasSteps && !state.graph.edges.length;
+  $("read-diagram").disabled = !hasPage;
+  $("welcome").hidden = hasSteps;
+  $("welcome-title").textContent = !hasPage
+    ? "0 pages created. Let’s start here."
+    : "0 steps created on this page.";
+  $("welcome-description").textContent = !hasPage
+    ? "Create a page for your own diagram, or explore an example to see how it works."
+    : "Add one step, or turn a list into a connected flow. Every change can be undone.";
+  $("welcome-start").textContent = hasPage
+    ? "Add the first step"
+    : "Create your first page";
+  $("welcome-flow").hidden = !hasPage;
   $("undo").disabled = !state.undo.length;
   $("redo").disabled = !state.redo.length;
   $("node-count").textContent = String(state.graph.nodes.length);
   $("graph-counts").textContent =
-    `${state.graph.nodes.length} steps · ${state.graph.edges.length} connections`;
+    `${state.graph.nodes.length} step${state.graph.nodes.length === 1 ? "" : "s"} · ${state.graph.edges.length} connection${state.graph.edges.length === 1 ? "" : "s"}`;
   $("warnings").replaceChildren(
     ...state.graph.warnings.map((warning) => element("p", warning)),
   );
@@ -199,7 +281,9 @@ function renderList() {
   $("no-results").hidden = nodes.length > 0;
   $("no-results").textContent = state.graph.nodes.length
     ? "No matching steps."
-    : "No steps yet. Add the first one below.";
+    : state.file.pages.length
+      ? "0 steps created. Add your first step."
+      : "0 pages created. Create a page to add steps.";
   $("node-list").replaceChildren(
     ...nodes.map((node, index) => {
       const li = element("li"),
@@ -295,9 +379,12 @@ function renderInspector() {
   $("group-navigation").replaceChildren();
   $("path-result").replaceChildren();
   if (!node) {
-    $("selected-heading").textContent = "Choose a step";
-    $("selected-summary").textContent =
-      "Add a step or open a diagram to get started.";
+    $("selected-heading").textContent = state.file.pages.length
+      ? "No step selected"
+      : "No page selected";
+    $("selected-summary").textContent = state.file.pages.length
+      ? "0 steps created. Add a step to explore its connections."
+      : "0 pages created. Create your first page or open a diagram.";
     $("outgoing").replaceChildren();
     $("incoming").replaceChildren();
     return;
@@ -334,8 +421,13 @@ function renderPreview() {
   const canvas = $("diagram"),
     graph = state.graph;
   canvas.replaceChildren();
-  $("empty-canvas").hidden = graph.nodes.length > 0;
+  $("empty-canvas").hidden = true;
+  canvas.toggleAttribute("hidden", !graph.nodes.length);
+  $("toggle-preview").disabled = !graph.nodes.length;
   if (!graph.nodes.length) {
+    $("preview").hidden = false;
+    $("toggle-preview").textContent = "Hide preview";
+    $("toggle-preview").setAttribute("aria-expanded", "true");
     canvas.setAttribute("viewBox", "0 0 500 400");
     return;
   }
@@ -515,6 +607,425 @@ function showEditor({
   ).focus();
 }
 
+function afterDialog(id, callback) {
+  $(id).close();
+  setTimeout(() => Promise.resolve().then(callback).catch(report), 0);
+}
+
+function createPage() {
+  showEditor({
+    title: "Create a page",
+    description: `${state.file.pages.length} page${state.file.pages.length === 1 ? "" : "s"} created. Each page is a separate diagram in the same file.`,
+    fields: [
+      field("page-name", "Page name", {
+        value: state.file.uniquePageName(),
+        required: true,
+      }),
+      field("page-template", "Start with", {
+        value: "blank",
+        options: [
+          { id: "blank", label: "A blank page" },
+          ...FLOW_TEMPLATES.filter((item) => item.id !== "custom"),
+        ],
+      }),
+    ],
+    submit: "Create page",
+    handler: () =>
+      mutateDocument(async (file) => {
+        const index = file.addPage($("page-name").value);
+        const template = FLOW_TEMPLATES.find(
+          (item) => item.id === $("page-template").value,
+        );
+        if (template) {
+          const graph = await file.page(index);
+          addFlow(graph, flowLabels(template.text));
+          file.markChanged(index);
+        }
+        return index;
+      }, "Page created. You can add steps or build a flow from a list."),
+  });
+}
+
+function renamePage(index) {
+  showEditor({
+    title: "Rename page",
+    fields: [
+      field("page-name", "Page name", {
+        value: state.file.pageName(index),
+        required: true,
+      }),
+    ],
+    handler: () =>
+      mutateDocument((file) => {
+        file.renamePage(index, $("page-name").value);
+        return state.page;
+      }, "Page renamed."),
+  });
+}
+
+function deletePage(index) {
+  showEditor({
+    title: "Delete this page?",
+    description: `Delete “${state.file.pageName(index)}” and all its steps and connections? ${state.file.pages.length === 1 ? "This will leave 0 pages created. " : ""}You can undo this change.`,
+    submit: "Delete page",
+    handler: () =>
+      mutateDocument(
+        (file) => file.deletePage(index),
+        "Page deleted. Undo is available.",
+      ),
+  });
+}
+
+function renderPages() {
+  $("pages-list").replaceChildren(
+    ...state.file.pages.map((page, index) => {
+      const item = element("li"),
+        title = element("h3", `${index + 1}. ${state.file.pageName(index)}`);
+      const controls = element("div", undefined, "page-row-actions");
+      const run = async (operation, message) => {
+        try {
+          await mutateDocument(operation, message);
+          renderPages();
+          $("pages-title").focus();
+        } catch (error) {
+          afterDialog("pages-dialog", () => report(error));
+        }
+      };
+      const previous = action("Move earlier", () =>
+        run((file) => file.movePage(index, -1), "Page moved earlier."),
+      );
+      previous.disabled = index === 0;
+      const next = action("Move later", () =>
+        run((file) => file.movePage(index, 1), "Page moved later."),
+      );
+      next.disabled = index === state.file.pages.length - 1;
+      const duplicate = action("Duplicate", () =>
+        run((file) => file.duplicatePage(index), "Page duplicated."),
+      );
+      duplicate.disabled = state.file.pages.length >= LIMITS.pages;
+      controls.append(
+        action(index === state.page ? "Current page" : "Open page", () =>
+          afterDialog("pages-dialog", () => switchPage(index)),
+        ),
+        action("Rename", () =>
+          afterDialog("pages-dialog", () => renamePage(index)),
+        ),
+        duplicate,
+        previous,
+        next,
+        action(
+          "Delete",
+          () => afterDialog("pages-dialog", () => deletePage(index)),
+          "danger-quiet",
+        ),
+      );
+      for (const button of controls.children)
+        button.setAttribute(
+          "aria-label",
+          `${button.textContent}: ${state.file.pageName(index)}`,
+        );
+      item.append(title, controls);
+      return item;
+    }),
+  );
+  $("manager-add-page").disabled = state.file.pages.length >= LIMITS.pages;
+}
+
+function managePages() {
+  if (state.busy) return;
+  renderPages();
+  $("pages-dialog").showModal();
+  $("pages-title").focus();
+}
+
+async function switchPage(index) {
+  if (state.busy || index < 0 || index >= state.file.pages.length) return;
+  state.page = index;
+  state.graph = await state.file.page(index);
+  state.selected = state.graph.nodes[0]?.id || null;
+  $("search").value = "";
+  render();
+  announce(
+    `Page ${index + 1} of ${state.file.pages.length}: ${state.file.pageName(index)}. ${state.graph.nodes.length} steps created.`,
+  );
+}
+
+function buildFlow() {
+  const template = field("flow-template", "Choose a starting point", {
+    value: "custom",
+    options: FLOW_TEMPLATES,
+  });
+  const steps = field("flow-steps", "Steps, one per line", {
+    type: "textarea",
+    required: true,
+  });
+  steps.querySelector("textarea").maxLength = 101000;
+  steps.querySelector("textarea").rows = 7;
+  const count = element(
+    "p",
+    "0 steps entered. Write a step on each line.",
+    "hint",
+  );
+  count.setAttribute("role", "status");
+  const update = () => {
+    const n = steps
+      .querySelector("textarea")
+      .value.split(/\r?\n/)
+      .filter((line) => line.trim()).length;
+    count.textContent = `${n} step${n === 1 ? "" : "s"} entered. Up to 100 steps per flow.`;
+  };
+  template.querySelector("select").addEventListener("change", (event) => {
+    steps.querySelector("textarea").value = FLOW_TEMPLATES.find(
+      (item) => item.id === event.target.value,
+    ).text;
+    update();
+  });
+  steps.querySelector("textarea").addEventListener("input", update);
+  showEditor({
+    title: "Build a flow from a list",
+    description:
+      "Each line becomes a step, connected to the next. This adds to your current page. You can undo the whole flow in one action.",
+    fields: [
+      template,
+      steps,
+      count,
+      field("flow-start", "Connect the first new step from", {
+        value: "",
+        options: [
+          { id: "", label: "Nothing — start a separate flow" },
+          ...state.graph.nodes,
+        ],
+      }),
+    ],
+    submit: "Create flow",
+    handler: () => {
+      const labels = flowLabels($("flow-steps").value);
+      return mutate(
+        (graph) => addFlow(graph, labels, $("flow-start").value || null),
+        `${labels.length} steps created and connected.`,
+      );
+    },
+  });
+}
+
+function addNext() {
+  const source = state.selected;
+  showEditor({
+    title: "Add the next step",
+    description: `Create a new step after “${state.graph.cells.get(source).label}” and connect them automatically.`,
+    fields: [
+      field("step-name", "New step name", { required: true }),
+      field("branch-name", "Connection label (optional)"),
+    ],
+    submit: "Add next step",
+    handler: () =>
+      mutate((graph) => {
+        graph.checkCapacity(2);
+        const id = graph.addNode($("step-name").value);
+        graph.connect(source, id, $("branch-name").value);
+        return id;
+      }, "Next step created and connected."),
+  });
+}
+
+function renameFile() {
+  showEditor({
+    title: "Rename diagram file",
+    fields: [
+      field("file-name", "File name", {
+        value: safeName(state.name),
+        required: true,
+      }),
+    ],
+    handler: () =>
+      mutateDocument(() => {
+        state.name = safeName($("file-name").value) + ".drawio";
+        return state.page;
+      }, "Diagram file renamed."),
+  });
+}
+
+let currentOutline = "";
+async function readDiagram() {
+  if (state.busy) return;
+  currentOutline = await outline(state.file, state.name);
+  $("outline-text").textContent = currentOutline;
+  $("reader-dialog").showModal();
+  $("close-reader").focus();
+}
+
+function checkDiagram() {
+  if (state.busy) return;
+  const issues = inspectGraph(state.graph, state.selected);
+  const repairs = issues.filter((item) => item.kind === "Repair").length;
+  $("checks-summary").textContent = issues.length
+    ? `${issues.length} observations · ${repairs} broken connections. Routes are checked from “${state.graph.cells.get(state.selected)?.label || "no selected step"}”.`
+    : "0 structural concerns found in these checks. This does not verify the correctness of the process.";
+  $("checks-list").replaceChildren(
+    ...issues.slice(0, 100).map((issue) => {
+      const li = element("li"),
+        badge = element("strong", issue.kind, "check-badge");
+      li.append(badge, element("p", issue.message));
+      if (issue.nodeId)
+        li.append(
+          action("Go to step", () =>
+            afterDialog("checks-dialog", () => select(issue.nodeId)),
+          ),
+        );
+      if (issue.edgeId)
+        li.append(
+          action("Edit connection", () =>
+            afterDialog("checks-dialog", () => editConnection(issue.edgeId)),
+          ),
+        );
+      return li;
+    }),
+  );
+  if (issues.length > 100)
+    $("checks-list").append(
+      element(
+        "li",
+        "Showing the first 100 observations. Review these and run checks again.",
+      ),
+    );
+  $("checks-dialog").showModal();
+  $("close-checks").focus();
+}
+
+function commands() {
+  const hasPage = state.file.pages.length > 0,
+    hasStep = Boolean(state.selected);
+  const list = [
+    {
+      label: "Create page",
+      run: createPage,
+      enabled: state.file.pages.length < LIMITS.pages,
+      reason: "40-page limit reached",
+    },
+    {
+      label: "Manage pages",
+      run: managePages,
+      enabled: hasPage,
+      reason: "0 pages created",
+    },
+    {
+      label: "Add a step",
+      run: addStep,
+      enabled: hasPage,
+      reason: "Create a page first",
+    },
+    {
+      label: "Add the next step",
+      run: addNext,
+      enabled: hasStep,
+      reason: "Select a step first",
+    },
+    {
+      label: "Build a flow from a list",
+      run: buildFlow,
+      enabled: hasPage,
+      reason: "Create a page first",
+    },
+    {
+      label: "Read and export text outline",
+      run: readDiagram,
+      enabled: hasPage,
+      reason: "Create a page first",
+    },
+    {
+      label: "Check diagram",
+      run: checkDiagram,
+      enabled: hasStep || state.graph.edges.length > 0,
+      reason: "Create a step or connection first",
+    },
+    {
+      label: "Rename selected step",
+      run: renameStep,
+      enabled: hasStep,
+      reason: "Select a step first",
+    },
+    {
+      label: "Connect a step",
+      run: () => editConnection(),
+      enabled: hasStep,
+      reason: "Create a step first",
+    },
+    { label: "Rename diagram file", run: renameFile, enabled: true },
+    {
+      label: "Download .drawio",
+      run: download,
+      enabled: hasPage,
+      reason: "Create a page first",
+    },
+    {
+      label: "Undo last change",
+      run: () => history("undo"),
+      enabled: state.undo.length > 0,
+      reason: "0 changes to undo",
+    },
+    {
+      label: "Redo last change",
+      run: () => history("redo"),
+      enabled: state.redo.length > 0,
+      reason: "0 changes to redo",
+    },
+    {
+      label: "Open a .drawio file",
+      run: () => $("file-input").click(),
+      enabled: true,
+    },
+    {
+      label: "Explore the example",
+      run: () => replaceDocument(example),
+      enabled: true,
+    },
+    { label: "New diagram", run: () => $("new-file").click(), enabled: true },
+  ];
+  for (let i = 0; i < state.file.pages.length; i++)
+    list.push({
+      label: `Open page: ${state.file.pageName(i)}`,
+      run: () => switchPage(i),
+      enabled: true,
+    });
+  for (const node of state.graph.nodes)
+    list.push({
+      label: `Go to step: ${node.label}`,
+      run: () => select(node.id),
+      enabled: true,
+    });
+  return list;
+}
+
+function renderCommands() {
+  const query = $("command-search").value.toLocaleLowerCase().trim();
+  const matches = commands().filter((command) =>
+    command.label.toLocaleLowerCase().includes(query),
+  );
+  $("command-count").textContent = matches.length
+    ? `${matches.length} matching actions${matches.length > 40 ? ". Showing the first 40; type more to narrow the list" : ""}.`
+    : "0 matching actions. Try a page name, step name, or words like add and read.";
+  $("command-results").replaceChildren(
+    ...matches.slice(0, 40).map((command) => {
+      const li = element("li"),
+        button = action(command.label, () =>
+          afterDialog("commands-dialog", command.run),
+        );
+      button.disabled = !command.enabled;
+      if (!command.enabled) button.append(element("small", command.reason));
+      li.append(button);
+      return li;
+    }),
+  );
+}
+
+function openCommands() {
+  if (state.busy || document.querySelector("dialog[open]")) return;
+  $("command-search").value = "";
+  renderCommands();
+  $("commands-dialog").showModal();
+  $("command-search").focus();
+}
+
 function addStep() {
   showEditor({
     title: "Add a step",
@@ -666,6 +1177,10 @@ async function example() {
 
 function download() {
   if (!state.file || state.busy) return;
+  if (!state.file.pages.length) {
+    announce("0 pages created. Create a page before downloading a diagram.");
+    return;
+  }
   const blob = new Blob([state.file.serialize()], {
     type: "application/xml;charset=utf-8",
   });
@@ -710,6 +1225,64 @@ $("help").addEventListener("click", () => {
   $("close-help").focus();
 });
 $("close-help").addEventListener("click", () => $("help-dialog").close());
+$("add-page").addEventListener("click", createPage);
+$("manage-pages").addEventListener("click", managePages);
+$("close-pages").addEventListener("click", () => $("pages-dialog").close());
+$("manager-add-page").addEventListener("click", () =>
+  afterDialog("pages-dialog", createPage),
+);
+$("welcome-start").addEventListener("click", () =>
+  state.file.pages.length ? addStep() : createPage(),
+);
+$("welcome-flow").addEventListener("click", buildFlow);
+$("welcome-example").addEventListener("click", () => replaceDocument(example));
+$("build-flow").addEventListener("click", buildFlow);
+$("add-next").addEventListener("click", addNext);
+$("read-diagram").addEventListener("click", () => readDiagram().catch(report));
+$("close-reader").addEventListener("click", () => $("reader-dialog").close());
+$("download-outline").addEventListener("click", () => {
+  const url = URL.createObjectURL(
+    new Blob([currentOutline], { type: "text/plain;charset=utf-8" }),
+  );
+  const link = element("a");
+  link.href = url;
+  link.download = safeName(state.name) + "-outline.txt";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+});
+$("check-diagram").addEventListener("click", checkDiagram);
+$("close-checks").addEventListener("click", () => $("checks-dialog").close());
+$("commands").addEventListener("click", openCommands);
+$("close-commands").addEventListener("click", () =>
+  $("commands-dialog").close(),
+);
+$("command-search").addEventListener("input", renderCommands);
+$("commands-dialog").addEventListener("keydown", (event) => {
+  const buttons = [
+    ...$("command-results").querySelectorAll("button:not(:disabled)"),
+  ];
+  if (!buttons.length) return;
+  if (event.target === $("command-search") && event.key === "Enter") {
+    event.preventDefault();
+    buttons[0].click();
+    return;
+  }
+  if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+  if (event.target !== $("command-search") && !buttons.includes(event.target))
+    return;
+  event.preventDefault();
+  const current = buttons.indexOf(document.activeElement);
+  const next =
+    current < 0
+      ? event.key === "ArrowDown"
+        ? 0
+        : buttons.length - 1
+      : (current + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) %
+        buttons.length;
+  buttons[next].focus();
+});
 $("add-step").addEventListener("click", addStep);
 $("rename-step").addEventListener("click", renameStep);
 $("delete-step").addEventListener("click", () => confirmDelete(state.selected));
@@ -739,12 +1312,7 @@ $("node-list").addEventListener("keydown", (event) => {
 $("page-select").addEventListener("change", async () => {
   if (state.busy) return;
   try {
-    state.page = Number($("page-select").value);
-    state.graph = await state.file.page(state.page);
-    state.selected = state.graph.nodes[0]?.id || null;
-    $("search").value = "";
-    render();
-    announce(`Page ${state.page + 1} opened.`);
+    await switchPage(Number($("page-select").value));
   } catch (error) {
     report(error);
   }
@@ -784,8 +1352,8 @@ $("file-input").addEventListener("change", () => {
 });
 $("new-file").addEventListener("click", () =>
   replaceDocument(async () => {
-    await load(EMPTY, "untitled.drawio");
-    announce("New diagram created. Add your first step.");
+    await load(BLANK, "untitled.drawio");
+    announce("New diagram. 0 pages created. Create your first page.");
   }),
 );
 $("load-example").addEventListener("click", () => replaceDocument(example));
@@ -808,6 +1376,10 @@ document.addEventListener("keydown", (event) => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(
     document.activeElement?.tagName,
   );
+  if (event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    openCommands();
+  }
   if (event.key.toLowerCase() === "s") {
     event.preventDefault();
     download();
@@ -873,10 +1445,5 @@ async function offline() {
   }
 }
 
-try {
-  await example();
-} catch (error) {
-  await load(EMPTY, "untitled.drawio");
-  report(error);
-}
+await load(BLANK, "untitled.drawio");
 offline();

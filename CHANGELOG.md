@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 — 2026-10-16
+
+- Start with an honest empty workspace: **0 pages created**, a clear next action, and disabled controls where a page or step is required.
+- Add full page management: create, rename, duplicate, reorder, and delete pages, including undo/redo across those changes.
+- Turn a multiline list into a connected flow; use project, support, or learning starters; add a next step and connection together.
+- Open searchable quick actions with Ctrl/Command+K, including page and step navigation and explanations for unavailable actions.
+- Read and export a complete plain-text diagram outline across all pages.
+- Review structural observations and jump directly to affected steps or connections. Checks include broken endpoints, ambiguous branch labels, disconnected steps, unreachable routes, and loops.
+- Preserve the local-only processing model, with no new runtime dependencies or API keys.
+- Expand automated coverage to 46 tests, including every new dialog, real zero states, page preservation, mobile layout, and bulk-edit undo.
+
 ## 0.1.0 — 2026-10-16
 
 Initial public preview.

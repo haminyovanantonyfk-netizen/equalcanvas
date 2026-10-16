@@ -55,9 +55,17 @@ for (const file of files) {
       /\.innerHTML\s*=|\.outerHTML\s*=|document\.write\s*\(/.test(content)
     )
       problems.push(`${file}: unsafe executable/HTML sink`);
-    if (
-      /https?:\/\//.test(content.replaceAll("http://www.w3.org/2000/svg", ""))
-    )
+    let runtime = content.replaceAll("http://www.w3.org/2000/svg", "");
+    if (file.endsWith(".html")) {
+      // Only exact public project links in anchors and share metadata are allowed.
+      runtime = runtime.replace(/<(?:a|meta)\b[^>]*>/g, (tag) =>
+        tag.replace(
+          /(?:href|content)="https:\/\/(?:github\.com\/haminyovanantonyfk-netizen\/equalcanvas(?:\/(?:issues|discussions))?|haminyovanantonyfk-netizen\.github\.io\/equalcanvas\/icon-512\.png)"/g,
+          "",
+        ),
+      );
+    }
+    if (/https?:\/\//.test(runtime))
       problems.push(`${file}: external URL in runtime code`);
   }
   if (file.endsWith(".js") || file.endsWith(".mjs"))

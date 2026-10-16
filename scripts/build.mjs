@@ -1,9 +1,11 @@
 import { mkdir, copyFile, readdir } from "node:fs/promises";
 const files = [
   "index.html",
+  "about.html",
   "style.css",
   "app.js",
   "model.js",
+  "insights.js",
   "sw.js",
   "example.drawio",
   "icon.svg",

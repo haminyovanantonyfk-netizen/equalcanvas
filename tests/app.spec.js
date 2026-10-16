@@ -5,6 +5,7 @@ import { BASIC, graph, file, step, edge, upload } from "./fixtures.js";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
+  await page.locator("#welcome-example").click();
   await expect(page.locator("#node-count")).toHaveText("5");
 });
 test("keyboard navigation follows named branches and returns focus to details", async ({
@@ -73,6 +74,8 @@ test("creates a new diagram and edits a directed connection", async ({
 }) => {
   await page.getByRole("button", { name: "New diagram", exact: true }).click();
   await expect(page.locator("#node-count")).toHaveText("0");
+  await page.locator("#welcome-start").click();
+  await page.locator("#submit-dialog").click();
   for (const name of ["Start", "Finish"]) {
     await page.getByRole("button", { name: "Add a step" }).click();
     await page.getByLabel("Step name", { exact: true }).fill(name);
@@ -86,7 +89,7 @@ test("creates a new diagram and edits a directed connection", async ({
     .getByRole("button", { name: "Connect steps", exact: true })
     .click();
   await expect(page.locator("#graph-counts")).toHaveText(
-    "2 steps · 1 connections",
+    "2 steps · 1 connection",
   );
   await page
     .getByRole("button", { name: "Edit connection Done from Start" })
@@ -107,7 +110,7 @@ test("deletion requires confirmation and can be undone", async ({ page }) => {
   await page.locator("#submit-dialog").click();
   await expect(page.locator("#node-count")).toHaveText("1");
   await expect(page.locator("#graph-counts")).toHaveText(
-    "1 steps · 0 connections",
+    "1 step · 0 connections",
   );
   await page.getByRole("button", { name: "Undo last change" }).click();
   await expect(page.locator("#node-count")).toHaveText("2");
@@ -175,6 +178,7 @@ test("app works offline and caches only its public shell", async ({
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await page.reload();
+  await page.locator("#welcome-example").click();
   await expect(page.locator("#node-count")).toHaveText("5");
   await expect(page.locator("#offline-state")).toContainText("Offline");
   await upload(page, BASIC);
@@ -195,7 +199,7 @@ test("app works offline and caches only its public shell", async ({
   expect(stored.local).toBe(0);
   expect(stored.session).toBe(0);
   expect(stored.keys).not.toContain("/test.drawio");
-  expect(stored.keys).toHaveLength(10);
+  expect(stored.keys).toHaveLength(12);
 });
 test("desktop, editor dialog, and help pass automated WCAG A/AA checks", async ({
   page,

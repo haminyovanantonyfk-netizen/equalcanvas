@@ -1,13 +1,15 @@
 // Cache only the public application shell. User diagrams never reach this worker.
-const VERSION = "equalcanvas-v0.1.0-1";
+const VERSION = "equalcanvas-v0.2.0-1";
 const BASE = new URL("./", self.location.href);
 const CACHE = VERSION + "-" + BASE.pathname;
 const ASSETS = [
   "./",
   "./index.html",
+  "./about.html",
   "./style.css",
   "./app.js",
   "./model.js",
+  "./insights.js",
   "./example.drawio",
   "./icon.svg",
   "./icon-192.png",

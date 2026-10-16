@@ -6,6 +6,10 @@ EqualCanvas is an open-source browser app for exploring and editing draw.io diag
 
 ![EqualCanvas showing a community-library flowchart, step list, and incoming and outgoing connections](docs/preview.png)
 
+**Completely free:** no subscriptions, paid feature tiers, accounts, or API keys. Free to use, study, change, and share under the MIT license.
+
+[About the project](https://haminyovanantonyfk-netizen.github.io/equalcanvas/about.html) · [Launch copy](LAUNCH.md)
+
 ## Try it
 
 [Open EqualCanvas](https://haminyovanantonyfk-netizen.github.io/equalcanvas/), or run it locally:
@@ -16,12 +20,18 @@ node scripts/serve.mjs
 
 Visit **http://127.0.0.1:4173**. Node.js 22 or later is recommended. There are **no production dependencies** and no API keys. Installation of development packages is only needed for tests.
 
-The example shows a community library's borrowing process. Select **Is it available?**, follow the **Yes** connection, and use **Insert step** to add a step to that route. Download the edited `.drawio` file and open it in draw.io.
+The app starts with **0 pages created**. Choose **Create your first page**, or **Explore the example** to try a community library's borrowing process. In the example, select **Is it available?**, follow the **Yes** connection, and use **Insert step** to add a step to that route. Download the edited `.drawio` file and open it in draw.io.
 
-## What works in v0.1.0
+## What works in v0.2.0
 
 - Open compressed or uncompressed `.drawio` files and standalone `mxGraphModel` XML.
-- Switch between pages; search steps; navigate incoming and outgoing connections.
+- Create, rename, duplicate, reorder, delete, and switch between pages. Page changes participate in undo/redo, including recovery of the last deleted page.
+- Clear zero-page, zero-step, empty search, and unavailable-action messages with useful next actions.
+- Build up to 100 connected steps from a list, with project, support-request, and learning-plan starters. Add a next step with its connection in one action.
+- Search actions, pages, and steps through the keyboard-operated quick-actions menu.
+- Read and download a plain-text outline of all pages, groups, steps, and incoming/outgoing connections.
+- Review missing endpoints, ambiguous branch labels, duplicate names, disconnected steps, unreachable routes from the selected step, and loops. Jump directly to an item or edit a connection. Checks are structural observations, not a correctness score.
+- Search steps and navigate incoming and outgoing connections.
 - Navigate group membership and find a shortest directed route between steps.
 - Add steps and decisions; rename steps; add, relabel, reconnect, split, and delete connections.
 - Delete a group with its descendants and attached connections, with confirmation.
@@ -39,6 +49,7 @@ The example shows a community library's borrowing process. Select **Is it availa
 | Home / End in the step list | First / last step                          |
 | Enter / Space on a step     | Select it and focus its details            |
 | Ctrl/Command+S              | Download the current diagram               |
+| Ctrl/Command+K              | Find an action, page, or step              |
 | Ctrl/Command+Z              | Undo a diagram change, outside text fields |
 | Ctrl/Command+Shift+Z        | Redo a diagram change, outside text fields |
 | Escape                      | Close the current dialog                   |
@@ -64,6 +75,10 @@ This is an early working release, not a claim of universal diagram accessibility
 The visual preview simplifies rich text, custom shapes, images, edge arrow decorations, routing points, and relative positioning. Navigation follows each edge's `source` to `target`; an edge drawn without arrowheads is still traversed this way. Unknown attributes are retained, but their semantics are not interpreted. Inserted steps receive a basic layout and may need repositioning in draw.io. Renaming a label intentionally replaces its rich text with escaped plain text.
 
 Limits: 8 MB input/export, 40 pages, 2,000 cells per page, 12 MB expanded data per compressed page, and 24 MB combined expanded page data. A current browser with `DecompressionStream('deflate-raw')` is needed for compressed imports. Uncompressed XML can be used when that feature is unavailable. Images, PDFs, and Visio files are not accepted.
+
+Zero-page documents can be opened and edited, but create a page before downloading a `.drawio` file. Flow starters are intentionally simple examples; adapt them for your own work. Page duplication preserves embedded content and links; links that explicitly point to the source page are not rewritten. Checks show at most 100 observations at once, and quick actions show the first 40 matches to keep navigation manageable.
+
+When an app update is ready, download your work and close all EqualCanvas tabs/windows before reopening. The service worker waits for existing sessions to finish instead of replacing code underneath an unsaved diagram.
 
 ## Development
 

@@ -31,6 +31,8 @@
         <span class="privacy"
           ><span aria-hidden="true">●</span> Files stay on this device</span
         ><button id="install" hidden>Install app</button
+        ><button id="commands" class="quiet">
+          Quick actions <kbd>Ctrl K</kbd></button
         ><button id="help" class="quiet">Help &amp; shortcuts</button>
       </div>
     </header>
@@ -39,7 +41,7 @@
         <div>
           <p class="eyebrow">YOUR WORKSPACE</p>
           <h1 id="document-title">A diagram everyone can work with.</h1>
-          <p id="document-state">Loading example…</p>
+          <p id="document-state">Preparing your workspace…</p>
         </div>
         <div class="document-actions">
           <button id="new-file" class="quiet">New diagram</button
@@ -54,6 +56,14 @@
           </button>
         </div>
       </section>
+      <nav class="workspace-tools" aria-label="Diagram tools">
+        <button id="build-flow">Build a flow from a list</button>
+        <button id="read-diagram">Read &amp; export text</button>
+        <button id="check-diagram">Check diagram</button>
+        <span class="hint"
+          >Create, understand, and improve — at your pace.</span
+        >
+      </nav>
       <div id="error" class="message error" role="alert" hidden></div>
       <div
         id="status"
@@ -70,6 +80,11 @@
           </div>
           <label for="page-select">Diagram page</label
           ><select id="page-select"></select>
+          <p id="page-count" class="hint" role="status">0 pages created</p>
+          <div class="page-actions">
+            <button id="add-page">＋ Create page</button
+            ><button id="manage-pages">Manage pages</button>
+          </div>
           <label for="search">Find a step</label
           ><input
             id="search"
@@ -128,6 +143,22 @@
             </div>
           </div>
           <div id="preview" class="preview">
+            <div id="welcome" class="welcome" hidden>
+              <span class="welcome-icon" aria-hidden="true">◇</span>
+              <h2 id="welcome-title">0 pages created. Let’s start here.</h2>
+              <p id="welcome-description">
+                Create your first page or explore an example.
+              </p>
+              <div class="welcome-actions">
+                <button id="welcome-start" class="primary">
+                  Create your first page</button
+                ><button id="welcome-flow">Build a flow from a list</button
+                ><button id="welcome-example">Explore the example</button>
+              </div>
+              <p class="hint">
+                No sign-up. No uploads. Your work stays on this device.
+              </p>
+            </div>
             <svg
               id="diagram"
               xmlns="http://www.w3.org/2000/svg"
@@ -150,7 +181,7 @@
           <div id="warnings" class="warnings" hidden></div>
           <div class="offline-strip">
             <span id="offline-state">Preparing offline access…</span
-            ><span>Open source · v0.1.0</span>
+            ><span>Open source · v0.2.0</span>
           </div>
         </section>
         <section class="inspector" aria-labelledby="selected-heading">
@@ -170,6 +201,9 @@
               <button id="rename-step">Rename</button
               ><button id="delete-step" class="danger-quiet">Delete</button>
             </div>
+            <button id="add-next" class="full-width">
+              ＋ Add the next step
+            </button>
             <div id="group-navigation"></div>
             <section
               class="connections-section"
@@ -208,9 +242,84 @@
       </div>
       <footer class="page-footer">
         <p>One diagram. More ways to participate.</p>
-        <p>Works with .drawio files · No account needed</p>
+        <p>
+          <a href="./about.html">Completely free · MIT open source</a> · No
+          account needed
+        </p>
       </footer>
     </main>
+    <dialog id="pages-dialog" aria-labelledby="pages-title">
+      <div class="dialog-header">
+        <h2 id="pages-title" tabindex="-1">Manage pages</h2>
+        <button id="close-pages" aria-label="Close page manager">×</button>
+      </div>
+      <p class="hint">
+        Rename, duplicate, reorder, or delete a page. Page changes support undo.
+      </p>
+      <ol id="pages-list" class="pages-list"></ol>
+      <button id="manager-add-page" class="primary">Create page</button>
+    </dialog>
+    <dialog id="commands-dialog" aria-labelledby="commands-title">
+      <div class="dialog-header">
+        <h2 id="commands-title">What would you like to do?</h2>
+        <button id="close-commands" aria-label="Close quick actions">×</button>
+      </div>
+      <label for="command-search">Find an action, page, or step</label
+      ><input
+        id="command-search"
+        type="search"
+        autocomplete="off"
+        placeholder="Try: add, read, check, or a step name…"
+      />
+      <p class="hint">
+        Type to filter. Use ↑ ↓ to move, Enter to run, Escape to close.
+      </p>
+      <p id="command-count" role="status" class="hint"></p>
+      <ul
+        id="command-results"
+        class="command-results"
+        aria-label="Matching actions"
+      ></ul>
+    </dialog>
+    <dialog
+      id="reader-dialog"
+      class="wide-dialog"
+      aria-labelledby="reader-title"
+    >
+      <div class="dialog-header">
+        <h2 id="reader-title">Read your diagram</h2>
+        <button id="close-reader" aria-label="Close reading view">×</button>
+      </div>
+      <p class="hint">
+        A complete text outline of all pages, steps, groups, and connections.
+        Step numbers distinguish repeated names.
+      </p>
+      <button id="download-outline" class="primary">
+        Download text outline
+      </button>
+      <pre
+        id="outline-text"
+        tabindex="0"
+        aria-label="Diagram text outline"
+      ></pre>
+    </dialog>
+    <dialog
+      id="checks-dialog"
+      class="wide-dialog"
+      aria-labelledby="checks-title"
+    >
+      <div class="dialog-header">
+        <h2 id="checks-title">Review your diagram</h2>
+        <button id="close-checks" aria-label="Close diagram checks">×</button>
+      </div>
+      <p class="hint">
+        Structural checks help you find unclear connections. Separate steps,
+        loops, and unreachable routes may be intentional; nothing is changed
+        automatically.
+      </p>
+      <p id="checks-summary" role="status"></p>
+      <ul id="checks-list" class="checks-list"></ul>
+    </dialog>
     <dialog id="editor-dialog" aria-labelledby="dialog-title">
       <form id="editor-form">
         <div class="dialog-header">
@@ -242,6 +351,10 @@
       </p>
       <h3>Keyboard &amp; screen readers</h3>
       <ul>
+        <li>
+          <kbd>Ctrl / ⌘ + K</kbd> opens quick actions. Search for an action,
+          page, or step; use the arrow keys and Enter to choose.
+        </li>
         <li><kbd>Tab</kbd> moves between controls.</li>
         <li>
           <kbd>↑</kbd> / <kbd>↓</kbd> moves through the step list;
@@ -262,7 +375,23 @@
         automatically saved. Download your work before closing this tab. Offline
         caching stores only the app and its public example.
       </p>
-      <h3>First release boundaries</h3>
+      <h3>Build and manage your work</h3>
+      <p>
+        Create a page to begin. Choose a blank page or a starter flow. Manage
+        pages lets you rename, duplicate, reorder, and delete pages. Deleting
+        the last page leaves 0 pages created; Undo brings it back.
+      </p>
+      <p>
+        Build a flow from a list creates up to 100 connected steps in one
+        undoable action. Add the next step connects a new step automatically.
+        Read &amp; export text includes every page in a downloadable outline.
+      </p>
+      <p>
+        Check diagram finds missing endpoints, ambiguous branch labels,
+        disconnected steps, unreachable routes from the selected step, and
+        loops. These are observations, not proof that a process is wrong.
+      </p>
+      <h3>Current boundaries</h3>
       <p>
         Basic steps, decisions, groups, directed connections, and multiple pages
         are supported. Images, custom shapes, edge decorations, and rich

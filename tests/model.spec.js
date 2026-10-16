@@ -3,7 +3,7 @@ import { deflateRawSync } from "node:zlib";
 import { BASIC, graph, file, step, edge } from "./fixtures.js";
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#node-count")).toHaveText("5");
+  await expect(page.locator("#page-count")).toHaveText("0 pages created");
 });
 const run = (page, data, body) =>
   page.evaluate(

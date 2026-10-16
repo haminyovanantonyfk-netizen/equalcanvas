@@ -10,11 +10,9 @@ export const BASIC = file(
   `<diagram id="p1" name="Main">${graph(step("a", "First") + step("b", "Second") + edge("e", "a", "b", "Yes"), 'custom="kept"')}</diagram>`,
 );
 export async function upload(page, xml, name = "test.drawio") {
-  await page
-    .locator("#file-input")
-    .setInputFiles({
-      name,
-      mimeType: "application/xml",
-      buffer: Buffer.from(xml),
-    });
+  await page.locator("#file-input").setInputFiles({
+    name,
+    mimeType: "application/xml",
+    buffer: Buffer.from(xml),
+  });
 }
