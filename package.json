@@ -1,0 +1,20 @@
+{
+  "name": "equalcanvas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An offline diagram editor built around connections, keyboard navigation, and shared draw.io files.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.1",
+    "@playwright/test": "1.61.1",
+    "prettier": "3.6.2"
+  }
+}

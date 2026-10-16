@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#112b2e" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      name="description"
+      content="Explore and edit diagrams through their connections. An open-source, offline editor for shared draw.io files."
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>EqualCanvas — diagrams, together</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./style.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#workspace">Skip to diagram</a>
+    <header class="app-header">
+      <a class="brand" href="./" aria-label="EqualCanvas home"
+        ><img src="./icon.svg" width="36" height="36" alt="" /><span
+          >EqualCanvas<small>DIAGRAMS, TOGETHER</small></span
+        ></a
+      >
+      <div class="header-actions">
+        <span class="privacy"
+          ><span aria-hidden="true">●</span> Files stay on this device</span
+        ><button id="install" hidden>Install app</button
+        ><button id="help" class="quiet">Help &amp; shortcuts</button>
+      </div>
+    </header>
+    <main id="workspace">
+      <section class="document-bar" aria-label="Document controls">
+        <div>
+          <p class="eyebrow">YOUR WORKSPACE</p>
+          <h1 id="document-title">A diagram everyone can work with.</h1>
+          <p id="document-state">Loading example…</p>
+        </div>
+        <div class="document-actions">
+          <button id="new-file" class="quiet">New diagram</button
+          ><button id="open-file">Open .drawio</button
+          ><input
+            id="file-input"
+            type="file"
+            accept=".drawio,.xml,application/xml,text/xml"
+            hidden
+          /><button id="download" class="primary">
+            Download .drawio <span aria-hidden="true">↗</span>
+          </button>
+        </div>
+      </section>
+      <div id="error" class="message error" role="alert" hidden></div>
+      <div
+        id="status"
+        class="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      ></div>
+      <div class="workbench">
+        <aside class="explorer" aria-labelledby="explorer-heading">
+          <div class="section-head">
+            <h2 id="explorer-heading">Explore steps</h2>
+            <span id="node-count" class="count">0</span>
+          </div>
+          <label for="page-select">Diagram page</label
+          ><select id="page-select"></select>
+          <label for="search">Find a step</label
+          ><input
+            id="search"
+            type="search"
+            placeholder="Search names…"
+            autocomplete="off"
+            maxlength="200"
+          />
+          <p id="list-hint" class="hint">
+            Use ↑ ↓ to move through the list. Enter selects a step.
+          </p>
+          <ul
+            id="node-list"
+            class="node-list"
+            aria-label="Diagram steps"
+            aria-describedby="list-hint"
+          ></ul>
+          <p id="no-results" hidden>No matching steps.</p>
+          <button id="add-step" class="add-button">＋ Add a step</button>
+          <div class="explorer-footer">
+            <strong>Follow the connections.</strong>
+            <p>Select a step to explore what comes before and after it.</p>
+            <button id="load-example" class="text-button">
+              Open the example
+            </button>
+          </div>
+        </aside>
+        <section class="canvas-panel" aria-labelledby="canvas-heading">
+          <div class="canvas-toolbar">
+            <div>
+              <h2 id="canvas-heading">The big picture</h2>
+              <span id="graph-counts" class="hint"></span>
+            </div>
+            <div class="toolbar-actions">
+              <button
+                id="undo"
+                aria-label="Undo last change"
+                title="Undo (Ctrl or Command + Z)"
+                disabled
+              >
+                ↶<span class="sr-only"> Undo</span></button
+              ><button
+                id="redo"
+                aria-label="Redo last change"
+                title="Redo (Ctrl or Command + Shift + Z)"
+                disabled
+              >
+                ↷<span class="sr-only"> Redo</span></button
+              ><button
+                id="toggle-preview"
+                aria-expanded="true"
+                aria-controls="preview"
+              >
+                Hide preview
+              </button>
+            </div>
+          </div>
+          <div id="preview" class="preview">
+            <svg
+              id="diagram"
+              xmlns="http://www.w3.org/2000/svg"
+              role="img"
+              aria-label="Simplified visual diagram. Explore steps and connections using the adjacent controls."
+            ></svg>
+            <p id="empty-canvas" hidden>
+              Start with one step.<br /><span
+                >Then connect it to the next.</span
+              >
+            </p>
+          </div>
+          <div class="canvas-note">
+            <span aria-hidden="true">◈</span>
+            <p>
+              Simplified preview. Original shapes, formatting, and metadata are
+              retained in your download unless edited.
+            </p>
+          </div>
+          <div id="warnings" class="warnings" hidden></div>
+          <div class="offline-strip">
+            <span id="offline-state">Preparing offline access…</span
+            ><span>Open source · v0.1.0</span>
+          </div>
+        </section>
+        <section class="inspector" aria-labelledby="selected-heading">
+          <p class="eyebrow">SELECTED STEP</p>
+          <h2
+            id="selected-heading"
+            tabindex="-1"
+            aria-describedby="selected-summary"
+          >
+            Choose a step
+          </h2>
+          <p id="selected-summary" class="hint">
+            Its connections will appear here.
+          </p>
+          <div id="selection-tools" hidden>
+            <div class="selection-actions">
+              <button id="rename-step">Rename</button
+              ><button id="delete-step" class="danger-quiet">Delete</button>
+            </div>
+            <div id="group-navigation"></div>
+            <section
+              class="connections-section"
+              aria-labelledby="outgoing-heading"
+            >
+              <div class="section-head">
+                <h3 id="outgoing-heading">Goes to</h3>
+                <span id="outgoing-count" class="small-count"></span>
+              </div>
+              <ul id="outgoing" class="connections"></ul>
+            </section>
+            <section
+              class="connections-section"
+              aria-labelledby="incoming-heading"
+            >
+              <div class="section-head">
+                <h3 id="incoming-heading">Comes from</h3>
+                <span id="incoming-count" class="small-count"></span>
+              </div>
+              <ul id="incoming" class="connections"></ul>
+            </section>
+            <button id="add-connection" class="full-width">
+              ＋ Connect a step
+            </button>
+            <details class="path-finder">
+              <summary>Find a route from this step</summary>
+              <form id="path-form">
+                <label for="path-target">Destination</label
+                ><select id="path-target"></select
+                ><button type="submit">Find route</button>
+              </form>
+              <div id="path-result" aria-live="polite"></div>
+            </details>
+          </div>
+        </section>
+      </div>
+      <footer class="page-footer">
+        <p>One diagram. More ways to participate.</p>
+        <p>Works with .drawio files · No account needed</p>
+      </footer>
+    </main>
+    <dialog id="editor-dialog" aria-labelledby="dialog-title">
+      <form id="editor-form">
+        <div class="dialog-header">
+          <h2 id="dialog-title"></h2>
+          <button id="close-dialog" type="button" aria-label="Close dialog">
+            ×
+          </button>
+        </div>
+        <p id="dialog-description" class="hint"></p>
+        <div id="dialog-fields"></div>
+        <p id="dialog-error" class="error-text" role="alert"></p>
+        <div class="dialog-actions">
+          <button id="cancel-dialog" type="button">Cancel</button
+          ><button id="submit-dialog" class="primary" type="submit">
+            Save
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="help-dialog" aria-labelledby="help-title">
+      <div class="dialog-header">
+        <h2 id="help-title">Make yourself at home.</h2>
+        <button id="close-help" aria-label="Close help">×</button>
+      </div>
+      <p>
+        Open a <strong>.drawio or draw.io XML file</strong>, or try the example.
+        Choose a step in the list, then follow its incoming and outgoing
+        connections.
+      </p>
+      <h3>Keyboard &amp; screen readers</h3>
+      <ul>
+        <li><kbd>Tab</kbd> moves between controls.</li>
+        <li>
+          <kbd>↑</kbd> / <kbd>↓</kbd> moves through the step list;
+          <kbd>Home</kbd> / <kbd>End</kbd> jumps to its ends.
+          <kbd>Enter</kbd> selects the focused step.
+        </li>
+        <li><kbd>Ctrl / ⌘ + S</kbd> downloads your diagram.</li>
+        <li>
+          <kbd>Ctrl / ⌘ + Z</kbd> undoes a diagram change. Add
+          <kbd>Shift</kbd> to redo. Text fields keep their normal editing
+          shortcuts.
+        </li>
+        <li><kbd>Escape</kbd> closes a dialog.</li>
+      </ul>
+      <h3>Your files belong to you</h3>
+      <p>
+        Diagram contents stay in browser memory. They are not uploaded or
+        automatically saved. Download your work before closing this tab. Offline
+        caching stores only the app and its public example.
+      </p>
+      <h3>First release boundaries</h3>
+      <p>
+        Basic steps, decisions, groups, directed connections, and multiple pages
+        are supported. Images, custom shapes, edge decorations, and rich
+        formatting are simplified in this preview. Connection navigation follows
+        the file’s source-to-target direction. Use draw.io to inspect complex
+        visual layouts.
+      </p>
+      <p>
+        Files are limited to 8 MB, 40 pages, 2,000 cells per page, and 24 MB of
+        combined expanded page data. This release has automated accessibility
+        checks; it has not yet been validated with blind participants.
+      </p>
+      <p id="install-help">
+        To install, use your browser’s “Install app” or “Add to Home Screen”
+        option when available. HTTPS or localhost is required for offline mode.
+      </p>
+    </dialog>
+    <noscript
+      ><p class="message error">
+        EqualCanvas needs JavaScript to read and edit diagram files locally.
+      </p></noscript
+    >
+  </body>
+</html>
